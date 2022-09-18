@@ -8,6 +8,7 @@ use std::cmp;
 use std::io::{self, Read};
 use std::ops::Range;
 use std::str;
+use std::sync::atomic::{AtomicUsize, Ordering};
 
 use crate::Oid;
 
@@ -107,6 +108,14 @@ pub enum Message {
     RowDescription(RowDescriptionBody),
 }
 
+static mut DATA_ROW_TAGS: AtomicUsize = AtomicUsize::new(0);
+
+enum LoggedTag {
+    DataRowTag,
+    Logged,
+    NotLogged,
+}
+
 impl Message {
     #[inline]
     pub fn parse(buf: &mut BytesMut) -> io::Result<Option<Message>> {
@@ -138,9 +147,18 @@ impl Message {
             idx: 5,
         };
 
+        let mut logged_tag = LoggedTag::NotLogged;
         let message = match tag {
-            PARSE_COMPLETE_TAG => Message::ParseComplete,
-            BIND_COMPLETE_TAG => Message::BindComplete,
+            PARSE_COMPLETE_TAG => {
+                log::info!("PARSE_COMPLETE_TAG");
+                logged_tag = LoggedTag::Logged;
+                Message::ParseComplete
+            },
+            BIND_COMPLETE_TAG => {
+                log::info!("BIND_COMPLETE_TAG");
+                logged_tag = LoggedTag::Logged;
+                Message::BindComplete
+            },
             CLOSE_COMPLETE_TAG => Message::CloseComplete,
             NOTIFICATION_RESPONSE_TAG => {
                 let process_id = buf.read_i32::<BigEndian>()?;
@@ -155,6 +173,8 @@ impl Message {
             COPY_DONE_TAG => Message::CopyDone,
             COMMAND_COMPLETE_TAG => {
                 let tag = buf.read_cstr()?;
+                log::info!("COMMAND_COMPLETE_TAG {{ tag: {:?} }}", tag);
+                logged_tag = LoggedTag::Logged;
                 Message::CommandComplete(CommandCompleteBody { tag })
             }
             COPY_DATA_TAG => {
@@ -164,6 +184,9 @@ impl Message {
             DATA_ROW_TAG => {
                 let len = buf.read_u16::<BigEndian>()?;
                 let storage = buf.read_all();
+
+                unsafe { DATA_ROW_TAGS.fetch_add(1, Ordering::Relaxed) };
+                logged_tag = LoggedTag::DataRowTag;
                 Message::DataRow(DataRowBody { storage, len })
             }
             ERROR_RESPONSE_TAG => {
@@ -194,6 +217,8 @@ impl Message {
             BACKEND_KEY_DATA_TAG => {
                 let process_id = buf.read_i32::<BigEndian>()?;
                 let secret_key = buf.read_i32::<BigEndian>()?;
+                log::info!("BACKEND_KEY_DATA_TAG {{ process_id: {} }}", process_id);
+                logged_tag = LoggedTag::Logged;
                 Message::BackendKeyData(BackendKeyDataBody {
                     process_id,
                     secret_key,
@@ -243,20 +268,28 @@ impl Message {
             PARAMETER_STATUS_TAG => {
                 let name = buf.read_cstr()?;
                 let value = buf.read_cstr()?;
+                log::info!("PARAMETER_STATUS_TAG {{ name: {:?}, value: {:?} }}", name, value);
+                logged_tag = LoggedTag::Logged;
                 Message::ParameterStatus(ParameterStatusBody { name, value })
             }
             PARAMETER_DESCRIPTION_TAG => {
                 let len = buf.read_u16::<BigEndian>()?;
                 let storage = buf.read_all();
+                log::info!("PARAMETER_DESCRIPTION_TAG {{ storage(len={}), len: {} }}", storage.len(), len);
+                logged_tag = LoggedTag::Logged;
                 Message::ParameterDescription(ParameterDescriptionBody { storage, len })
             }
             ROW_DESCRIPTION_TAG => {
                 let len = buf.read_u16::<BigEndian>()?;
                 let storage = buf.read_all();
+                log::info!("ROW_DESCRIPTION_TAG {{ storage(len={}), len: {} }}", storage.len(), len);
+                logged_tag = LoggedTag::Logged;
                 Message::RowDescription(RowDescriptionBody { storage, len })
             }
             READY_FOR_QUERY_TAG => {
                 let status = buf.read_u8()?;
+                log::info!("READY_FOR_QUERY_TAG {{ status: {} }}", status);
+                logged_tag = LoggedTag::Logged;
                 Message::ReadyForQuery(ReadyForQueryBody { status })
             }
             tag => {
@@ -266,6 +299,22 @@ impl Message {
                 ));
             }
         };
+        match logged_tag {
+            LoggedTag::DataRowTag => (),
+            LoggedTag::Logged => {
+                let len = unsafe { DATA_ROW_TAGS.swap(0, Ordering::Relaxed) };
+                if len != 0 {
+                    log::info!("DATA_ROW_TAGS(len={})", len);
+                }
+            },
+            LoggedTag::NotLogged => {
+                let len = unsafe { DATA_ROW_TAGS.swap(0, Ordering::Relaxed) };
+                if len != 0 {
+                    log::info!("DATA_ROW_TAGS(len={})", len);
+                }
+                log::info!("Message tag is {}", &(tag as char));
+            },
+        }
 
         if !buf.is_empty() {
             return Err(io::Error::new(
