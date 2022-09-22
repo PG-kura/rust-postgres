@@ -89,8 +89,9 @@ where
 {
     let stream = connect_tls(stream, config.ssl_mode, tls).await?;
 
+    let buffer_size: usize = 64 * 1024; // デフォルトは 8 * 1024;
     let mut stream = StartupStream {
-        inner: Framed::new(stream, PostgresCodec),
+        inner: Framed::with_capacity(stream, PostgresCodec, buffer_size),
         buf: BackendMessages::empty(),
         delayed: VecDeque::new(),
     };
