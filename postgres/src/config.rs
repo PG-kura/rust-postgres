@@ -340,6 +340,15 @@ impl Config {
         self.config.get_channel_binding()
     }
 
+    pub fn read_buffer_size(&mut self, read_buffer_size: usize) -> &mut Config {
+        self.config.read_buffer_size(read_buffer_size);
+        self
+    }
+
+    pub fn get_read_buffer_size(&self) -> usize {
+        self.config.get_read_buffer_size()
+    }
+
     /// Sets the notice callback.
     ///
     /// This callback will be invoked with the contents of every

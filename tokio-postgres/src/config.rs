@@ -164,6 +164,7 @@ pub struct Config {
     pub(crate) keepalive_config: KeepaliveConfig,
     pub(crate) target_session_attrs: TargetSessionAttrs,
     pub(crate) channel_binding: ChannelBinding,
+    pub(crate) read_buffer_size: usize,
 }
 
 impl Default for Config {
@@ -194,6 +195,7 @@ impl Config {
             keepalive_config,
             target_session_attrs: TargetSessionAttrs::Any,
             channel_binding: ChannelBinding::Prefer,
+            read_buffer_size: 8 * 1024,
         }
     }
 
@@ -424,6 +426,15 @@ impl Config {
         self.channel_binding
     }
 
+    pub fn read_buffer_size(&mut self, read_buffer_size: usize) -> &mut Config {
+        self.read_buffer_size = read_buffer_size;
+        self
+    }
+
+    pub fn get_read_buffer_size(&self) -> usize {
+        self.read_buffer_size
+    }
+
     fn param(&mut self, key: &str, value: &str) -> Result<(), Error> {
         match key {
             "user" => {
@@ -526,7 +537,14 @@ impl Config {
                     }
                 };
                 self.channel_binding(channel_binding);
+            },
+            "read_buffer_size" => {
+                let read_buffer_size = value
+                .parse::<usize>()
+                .map_err(|_| Error::config_parse(Box::new(InvalidValue("read_buffer_size"))))?;
+                self.read_buffer_size(read_buffer_size);
             }
+
             key => {
                 return Err(Error::config_parse(Box::new(UnknownOption(
                     key.to_string(),
@@ -601,6 +619,7 @@ impl fmt::Debug for Config {
             .field("keepalives_retries", &self.keepalive_config.retries)
             .field("target_session_attrs", &self.target_session_attrs)
             .field("channel_binding", &self.channel_binding)
+            .field("read_buffer_size", &self.read_buffer_size)
             .finish()
     }
 }
