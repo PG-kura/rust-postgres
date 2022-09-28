@@ -211,7 +211,7 @@ where
             let request = match self.poll_request(cx) {
                 Poll::Ready(Some(request)) => request,
                 Poll::Ready(None) if self.responses.is_empty() && self.state == State::Active => {
-                    trace!("poll_write: at eof, terminating");
+                    log::warn!("poll_write: at eof, terminating");
                     self.state = State::Terminating;
                     let mut request = BytesMut::new();
                     frontend::terminate(&mut request);
