@@ -165,6 +165,7 @@ pub struct Config {
     pub(crate) target_session_attrs: TargetSessionAttrs,
     pub(crate) channel_binding: ChannelBinding,
     pub(crate) read_buffer_size: usize,
+    pub(crate) logging: bool,
 }
 
 impl Default for Config {
@@ -196,6 +197,7 @@ impl Config {
             target_session_attrs: TargetSessionAttrs::Any,
             channel_binding: ChannelBinding::Prefer,
             read_buffer_size: 8 * 1024,
+            logging: false,
         }
     }
 
@@ -433,6 +435,15 @@ impl Config {
 
     pub fn get_read_buffer_size(&self) -> usize {
         self.read_buffer_size
+    }
+
+    pub fn get_logging(&self) -> bool {
+        self.logging
+    }
+
+    pub fn logging(&mut self, logging: bool) -> &mut Config {
+        self.logging = logging;
+        self
     }
 
     fn param(&mut self, key: &str, value: &str) -> Result<(), Error> {

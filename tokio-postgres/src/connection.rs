@@ -54,6 +54,7 @@ pub struct Connection<S, T> {
     pending_responses: VecDeque<BackendMessage>,
     responses: VecDeque<Response>,
     state: State,
+    logging: bool,
 }
 
 impl<S, T> Connection<S, T>
@@ -66,6 +67,7 @@ where
         pending_responses: VecDeque<BackendMessage>,
         parameters: HashMap<String, String>,
         receiver: mpsc::UnboundedReceiver<Request>,
+        logging: bool,
     ) -> Connection<S, T> {
         Connection {
             stream,
@@ -75,6 +77,7 @@ where
             pending_responses,
             responses: VecDeque::new(),
             state: State::Active,
+            logging,
         }
     }
 
@@ -211,7 +214,9 @@ where
             let request = match self.poll_request(cx) {
                 Poll::Ready(Some(request)) => request,
                 Poll::Ready(None) if self.responses.is_empty() && self.state == State::Active => {
-                    log::warn!("poll_write: at eof, terminating");
+                    if self.logging {
+                        log::warn!("poll_write: at eof, terminating");
+                    }
                     self.state = State::Terminating;
                     let mut request = BytesMut::new();
                     frontend::terminate(&mut request);
