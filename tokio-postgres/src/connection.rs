@@ -215,7 +215,7 @@ where
                 Poll::Ready(Some(request)) => request,
                 Poll::Ready(None) if self.responses.is_empty() && self.state == State::Active => {
                     if self.logging {
-                        log::warn!("poll_write: at eof, terminating");
+                        log::warn!("state: Active -> Terminating");
                     }
                     self.state = State::Terminating;
                     let mut request = BytesMut::new();
@@ -241,7 +241,9 @@ where
                         .start_send(request)
                         .map_err(Error::io)?;
                     if self.state == State::Terminating {
-                        trace!("poll_write: sent eof, closing");
+                        if self.logging {
+                            log::warn!("state: Terminating -> Closing");
+                        }
                         self.state = State::Closing;
                     }
                 }
@@ -273,13 +275,21 @@ where
             .map_err(Error::io)?
         {
             Poll::Ready(()) => trace!("poll_flush: flushed"),
-            Poll::Pending => trace!("poll_flush: waiting on socket"),
+            Poll::Pending => {
+                if self.logging {
+                    log::warn!("poll_flush() waiting on socket.");
+                }
+                trace!("poll_flush: waiting on socket");
+            },
         }
         Ok(())
     }
 
     fn poll_shutdown(&mut self, cx: &mut Context<'_>) -> Poll<Result<(), Error>> {
         if self.state != State::Closing {
+            if self.logging {
+                // log::warn!("poll_shutdown() -> Pending (because state is closing)");
+            }
             return Poll::Pending;
         }
 
@@ -288,11 +298,15 @@ where
             .map_err(Error::io)?
         {
             Poll::Ready(()) => {
-                trace!("poll_shutdown: complete");
+                if self.logging {
+                    log::warn!("poll_shutdown() -> Ready(Ok)");
+                }
                 Poll::Ready(Ok(()))
             }
             Poll::Pending => {
-                trace!("poll_shutdown: waiting on socket");
+                if self.logging {
+                    log::warn!("poll_shutdown() -> Pending (because poll_close() returned Pending)");
+                }
                 Poll::Pending
             }
         }
