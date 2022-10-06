@@ -32,6 +32,7 @@ use std::task::{Context, Poll};
 #[cfg(feature = "runtime")]
 use std::time::Duration;
 use tokio::io::{AsyncRead, AsyncWrite};
+use std::os::unix::prelude::RawFd;
 
 pub struct Responses {
     receiver: mpsc::Receiver<BackendMessages>,
@@ -170,6 +171,7 @@ pub struct Client {
     ssl_mode: SslMode,
     process_id: i32,
     secret_key: i32,
+    pub fd: RawFd,
 }
 
 impl Client {
@@ -178,6 +180,7 @@ impl Client {
         ssl_mode: SslMode,
         process_id: i32,
         secret_key: i32,
+        fd: RawFd,
     ) -> Client {
         Client {
             inner: Arc::new(InnerClient {
@@ -190,6 +193,7 @@ impl Client {
             ssl_mode,
             process_id,
             secret_key,
+            fd,
         }
     }
 

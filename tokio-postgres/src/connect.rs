@@ -61,7 +61,7 @@ async fn connect_once<T>(
 where
     T: TlsConnect<Socket>,
 {
-    let socket = connect_socket(
+    let (socket, fd) = connect_socket(
         host,
         port,
         config.connect_timeout,
@@ -72,7 +72,7 @@ where
         },
     )
     .await?;
-    let (mut client, mut connection) = connect_raw(socket, tls, config).await?;
+    let (mut client, mut connection) = connect_raw(socket, tls, config, fd).await?;
 
     if let TargetSessionAttrs::ReadWrite = config.target_session_attrs {
         let rows = client.simple_query_raw("SHOW transaction_read_only");

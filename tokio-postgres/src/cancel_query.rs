@@ -34,7 +34,7 @@ where
         .make_tls_connect(hostname)
         .map_err(|e| Error::tls(e.into()))?;
 
-    let socket = connect_socket::connect_socket(
+    let (socket, _) = connect_socket::connect_socket(
         &config.host,
         config.port,
         config.connect_timeout,

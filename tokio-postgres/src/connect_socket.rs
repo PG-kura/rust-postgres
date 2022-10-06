@@ -9,13 +9,15 @@ use std::time::Duration;
 use tokio::net::UnixStream;
 use tokio::net::{self, TcpStream};
 use tokio::time;
+use std::os::unix::io::AsRawFd;
+use std::os::unix::prelude::RawFd;
 
 pub(crate) async fn connect_socket(
     host: &Host,
     port: u16,
     connect_timeout: Option<Duration>,
     keepalive_config: Option<&KeepaliveConfig>,
-) -> Result<Socket, Error> {
+) -> Result<(Socket, RawFd), Error> {
     match host {
         Host::Tcp(host) => {
             let addrs = net::lookup_host((&**host, port))
@@ -25,8 +27,16 @@ pub(crate) async fn connect_socket(
             let mut last_err = None;
 
             for addr in addrs {
-                let stream =
-                    match connect_with_timeout(TcpStream::connect(addr), connect_timeout).await {
+                use std::net::TcpStream as StdTcpStream;
+
+                let fut = async {
+                    let std_tcp_stream = StdTcpStream::connect(addr)?;
+                    let fd = std_tcp_stream.as_raw_fd();
+                    io::Result::Ok((TcpStream::from_std(std_tcp_stream)?, fd))
+                };
+
+                let (stream, fd) =
+                    match connect_with_timeout(fut, connect_timeout).await {
                         Ok(stream) => stream,
                         Err(e) => {
                             last_err = Some(e);
@@ -41,7 +51,7 @@ pub(crate) async fn connect_socket(
                         .map_err(Error::connect)?;
                 }
 
-                return Ok(Socket::new_tcp(stream));
+                return Ok((Socket::new_tcp(stream), fd));
             }
 
             Err(last_err.unwrap_or_else(|| {
@@ -53,9 +63,7 @@ pub(crate) async fn connect_socket(
         }
         #[cfg(unix)]
         Host::Unix(path) => {
-            let path = path.join(format!(".s.PGSQL.{}", port));
-            let socket = connect_with_timeout(UnixStream::connect(path), connect_timeout).await?;
-            Ok(Socket::new_unix(socket))
+            unreachable!();
         }
     }
 }

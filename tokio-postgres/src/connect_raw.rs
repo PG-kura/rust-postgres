@@ -19,6 +19,7 @@ use std::pin::Pin;
 use std::task::{Context, Poll};
 use tokio::io::{AsyncRead, AsyncWrite};
 use tokio_util::codec::Framed;
+use std::os::unix::prelude::RawFd;
 
 pub struct StartupStream<S, T> {
     inner: Framed<MaybeTlsStream<S, T>, PostgresCodec>,
@@ -82,6 +83,7 @@ pub async fn connect_raw<S, T>(
     stream: S,
     tls: T,
     config: &Config,
+    fd: RawFd,
 ) -> Result<(Client, Connection<S, T::Stream>), Error>
 where
     S: AsyncRead + AsyncWrite + Unpin,
@@ -100,7 +102,7 @@ where
     let (process_id, secret_key, parameters) = read_info(&mut stream).await?;
 
     let (sender, receiver) = mpsc::unbounded();
-    let client = Client::new(sender, config.ssl_mode, process_id, secret_key);
+    let client = Client::new(sender, config.ssl_mode, process_id, secret_key, fd);
     let connection = Connection::new(stream.inner, stream.delayed, parameters, receiver, config.logging);
 
     Ok((client, connection))
