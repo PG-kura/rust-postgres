@@ -17,13 +17,22 @@ struct StatementInner {
 
 impl Drop for StatementInner {
     fn drop(&mut self) {
+        log::info!("StatementInner::drop()");
         if let Some(client) = self.client.upgrade() {
+            log::info!("StatementInner::drop() Upgraded to Arc");
             let buf = client.with_buf(|buf| {
+                log::info!("StatementInner::drop() frontend::close()");
                 frontend::close(b'S', &self.name, buf).unwrap();
+                log::info!("StatementInner::drop() frontend::sync()");
                 frontend::sync(buf);
+                log::info!("StatementInner::drop() frontend::freeze()");
                 buf.split().freeze()
             });
+            log::info!("StatementInner::drop() client.send()");
             let _ = client.send(RequestMessages::Single(FrontendMessage::Raw(buf)));
+            log::info!("StatementInner::drop() complete");
+        } else {
+            log::info!("StatementInner::drop() Couldn't upgrade to Arc");
         }
     }
 }
